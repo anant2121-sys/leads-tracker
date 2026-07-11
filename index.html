@@ -74,6 +74,7 @@
       </div>
 
       <button type="submit" class="btn-primary">Add Lead</button>
+      <p id="formError" class="inline-error" hidden></p>
     </form>
   </section>
 
@@ -122,6 +123,7 @@
   <!-- Leads Table -->
   <section class="card">
     <h2>Leads (<span id="leadCount">0</span>)</h2>
+    <p id="loadError" class="inline-error" hidden></p>
     <div class="table-wrap">
       <table id="leads-table">
         <thead>

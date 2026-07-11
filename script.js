@@ -1,42 +1,69 @@
 // ---------------------------------------------------------------------------
 // Leads Tracker
-// All lead data lives in localStorage under the key "leads-tracker-data".
-// It is loaded once into the `leads` array on startup, and every mutation
-// (add lead / edit status+comment) writes the whole array back to
-// localStorage straight away, so the data survives page refreshes.
+// All lead data lives on a backend API at API_BASE. The `leads` array is a
+// local cache: it's populated by GET /leads on startup and re-synced after
+// every mutation (POST /leads to add, PUT /leads/:id to change status or
+// append a comment), so the server is always the source of truth.
 // Records are never deleted — status changes go through the Edit modal and
 // are appended to each lead's comment history rather than overwriting it.
 // ---------------------------------------------------------------------------
 
-const STORAGE_KEY = "leads-tracker-data";
+const API_BASE = "http://localhost:3000";
 const STATUSES = ["New", "Contacted", "Qualified", "Won", "Hold", "Cancelled"];
 
-let leads = loadLeads();
+let leads = [];
 let editingLeadId = null;
 
-// ---- Storage helpers -------------------------------------------------------
+// ---- API helpers -------------------------------------------------------
 
-function loadLeads() {
+async function apiGetLeads() {
+  const res = await fetch(`${API_BASE}/leads`);
+  if (!res.ok) throw new Error(`GET /leads failed (${res.status})`);
+  return res.json();
+}
+
+async function apiCreateLead(payload) {
+  const res = await fetch(`${API_BASE}/leads`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`POST /leads failed (${res.status})`);
+  return res.json();
+}
+
+async function apiUpdateLead(id, payload) {
+  const res = await fetch(`${API_BASE}/leads/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`PUT /leads/${id} failed (${res.status})`);
+  return res.json();
+}
+
+function normalizeLeads(data) {
+  const list = Array.isArray(data) ? data : [];
+  // Backfill commentsHistory for leads returned without this field.
+  list.forEach((lead) => {
+    if (!Array.isArray(lead.commentsHistory)) lead.commentsHistory = [];
+  });
+  return list;
+}
+
+async function refreshLeads() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    // Backfill commentsHistory for leads saved before this field existed.
-    parsed.forEach((lead) => {
-      if (!Array.isArray(lead.commentsHistory)) lead.commentsHistory = [];
-    });
-    return parsed;
-  } catch (e) {
-    console.error("Failed to parse leads from localStorage", e);
-    return [];
+    const data = await apiGetLeads();
+    leads = normalizeLeads(data);
+    loadError.hidden = true;
+    render();
+  } catch (err) {
+    console.error(err);
+    leads = [];
+    render();
+    loadError.textContent = `Unable to reach the API at ${API_BASE}. Is the server running?`;
+    loadError.hidden = false;
   }
-}
-
-function saveLeads() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(leads));
-}
-
-function makeId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
 // ---- DOM references ---------------------------------------------------------
@@ -66,6 +93,10 @@ const editError = document.getElementById("editError");
 const editCancelBtn = document.getElementById("editCancelBtn");
 const editSaveBtn = document.getElementById("editSaveBtn");
 
+const loadError = document.getElementById("loadError");
+const formError = document.getElementById("formError");
+const formSubmitBtn = form.querySelector('button[type="submit"]');
+
 // ---- Form handling ------------------------------------------------------
 
 leadDetailsInput.addEventListener("input", () => {
@@ -76,11 +107,11 @@ notesInput.addEventListener("input", () => {
   notesCount.textContent = notesInput.value.length;
 });
 
-form.addEventListener("submit", (e) => {
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
+  formError.hidden = true;
 
   const newLead = {
-    id: makeId(),
     clientName: document.getElementById("clientName").value.trim(),
     type: document.getElementById("type").value,
     leadDate: new Date().toISOString(), // timestamp of creation
@@ -95,13 +126,23 @@ form.addEventListener("submit", (e) => {
     commentsHistory: [],
   };
 
-  leads.push(newLead);
-  saveLeads();
-  render();
+  formSubmitBtn.disabled = true;
+  formSubmitBtn.textContent = "Adding...";
 
-  form.reset();
-  leadDetailsCount.textContent = "0";
-  notesCount.textContent = "0";
+  try {
+    await apiCreateLead(newLead);
+    await refreshLeads();
+    form.reset();
+    leadDetailsCount.textContent = "0";
+    notesCount.textContent = "0";
+  } catch (err) {
+    console.error(err);
+    formError.textContent = `Failed to add lead. Is the API running at ${API_BASE}?`;
+    formError.hidden = false;
+  } finally {
+    formSubmitBtn.disabled = false;
+    formSubmitBtn.textContent = "Add Lead";
+  }
 });
 
 // ---- Filtering ------------------------------------------------------------
@@ -180,7 +221,7 @@ editModal.addEventListener("click", (e) => {
   if (e.target === editModal) closeEditModal();
 });
 
-editSaveBtn.addEventListener("click", () => {
+editSaveBtn.addEventListener("click", async () => {
   const lead = leads.find((l) => l.id === editingLeadId);
   if (!lead) return;
 
@@ -194,8 +235,9 @@ editSaveBtn.addEventListener("click", () => {
     return;
   }
 
+  const updatedHistory = lead.commentsHistory.slice();
   if (comment !== "") {
-    lead.commentsHistory.push({
+    updatedHistory.push({
       timestamp: new Date().toISOString(),
       status: newStatus,
       statusChanged: statusChanged,
@@ -203,10 +245,22 @@ editSaveBtn.addEventListener("click", () => {
     });
   }
 
-  lead.status = newStatus;
-  saveLeads();
-  render();
-  closeEditModal();
+  editSaveBtn.disabled = true;
+  editSaveBtn.textContent = "Saving...";
+  editError.hidden = true;
+
+  try {
+    await apiUpdateLead(lead.id, { status: newStatus, commentsHistory: updatedHistory });
+    await refreshLeads();
+    closeEditModal();
+  } catch (err) {
+    console.error(err);
+    editError.textContent = `Failed to save changes. Is the API running at ${API_BASE}?`;
+    editError.hidden = false;
+  } finally {
+    editSaveBtn.disabled = false;
+    editSaveBtn.textContent = "Save";
+  }
 });
 
 // ---- Rendering --------------------------------------------------------------
@@ -299,4 +353,4 @@ function escapeHtml(str) {
 
 // ---- Init -------------------------------------------------------------------
 
-render();
+refreshLeads();
