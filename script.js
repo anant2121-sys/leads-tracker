@@ -89,7 +89,7 @@ form.addEventListener("submit", (e) => {
     contactEmail: document.getElementById("contactEmail").value.trim(),
     contactPhone: document.getElementById("contactPhone").value.trim(),
     dealValue: document.getElementById("dealValue").value,
-    status: document.getElementById("status").value || "New",
+    status: "New",
     eta: document.getElementById("eta").value,
     notes: notesInput.value.trim(),
     commentsHistory: [],
