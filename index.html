@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client / Leads Tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Client / Leads Tracker</h1>
+</header>
+
+<main class="container">
+
+  <!-- Add Lead Form -->
+  <section class="card">
+    <h2>Add New Lead</h2>
+    <form id="lead-form">
+      <div class="form-grid">
+
+        <div class="field">
+          <label for="clientName">Client Name *</label>
+          <input type="text" id="clientName" required maxlength="100">
+        </div>
+
+        <div class="field">
+          <label for="type">Type *</label>
+          <select id="type" required>
+            <option value="">Select…</option>
+            <option value="EN">EN</option>
+            <option value="NN">NN</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="contactPerson">Contact Person *</label>
+          <input type="text" id="contactPerson" required maxlength="100">
+        </div>
+
+        <div class="field">
+          <label for="contactEmail">Contact Email *</label>
+          <input type="email" id="contactEmail" required maxlength="100">
+        </div>
+
+        <div class="field">
+          <label for="contactPhone">Contact Phone *</label>
+          <input type="tel" id="contactPhone" required maxlength="30">
+        </div>
+
+        <div class="field">
+          <label for="dealValue">Deal Value ($) *</label>
+          <input type="number" id="dealValue" required min="0" step="0.01">
+        </div>
+
+        <div class="field">
+          <label for="status">Status *</label>
+          <select id="status" required>
+            <option value="New">New</option>
+            <option value="Contacted">Contacted</option>
+            <option value="Qualified">Qualified</option>
+            <option value="Won">Won</option>
+            <option value="Hold">Hold</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="eta">ETA *</label>
+          <input type="date" id="eta" required>
+        </div>
+
+        <div class="field field-wide">
+          <label for="leadDetails">Lead Details * <span class="hint">(max 100 characters)</span></label>
+          <input type="text" id="leadDetails" required maxlength="100">
+          <span class="char-count"><span id="leadDetailsCount">0</span>/100</span>
+        </div>
+
+        <div class="field field-wide">
+          <label for="notes">Notes <span class="hint">(optional, max 200 characters)</span></label>
+          <textarea id="notes" rows="2" maxlength="200"></textarea>
+          <span class="char-count"><span id="notesCount">0</span>/200</span>
+        </div>
+
+      </div>
+
+      <button type="submit" class="btn-primary">Add Lead</button>
+    </form>
+  </section>
+
+  <!-- Filters -->
+  <section class="card">
+    <h2>Filters</h2>
+    <div class="filters">
+      <div class="field">
+        <label for="filterSearch">Search</label>
+        <input type="text" id="filterSearch" placeholder="Client, contact, details…">
+      </div>
+      <div class="field">
+        <label for="filterType">Type</label>
+        <select id="filterType">
+          <option value="">All</option>
+          <option value="EN">EN</option>
+          <option value="NN">NN</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filterStatus">Status</label>
+        <select id="filterStatus">
+          <option value="">All</option>
+          <option value="New">New</option>
+          <option value="Contacted">Contacted</option>
+          <option value="Qualified">Qualified</option>
+          <option value="Won">Won</option>
+          <option value="Hold">Hold</option>
+          <option value="Cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filterFrom">Lead Date From</label>
+        <input type="date" id="filterFrom">
+      </div>
+      <div class="field">
+        <label for="filterTo">Lead Date To</label>
+        <input type="date" id="filterTo">
+      </div>
+      <div class="field field-end">
+        <button type="button" id="clearFilters" class="btn-secondary">Clear Filters</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Leads Table -->
+  <section class="card">
+    <h2>Leads (<span id="leadCount">0</span>)</h2>
+    <div class="table-wrap">
+      <table id="leads-table">
+        <thead>
+          <tr>
+            <th>Client Name</th>
+            <th>Type</th>
+            <th>Lead Date</th>
+            <th>Details</th>
+            <th>Contact Person</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Deal Value</th>
+            <th>Status</th>
+            <th>ETA</th>
+            <th>Notes</th>
+            <th>Comments</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="leads-tbody">
+        </tbody>
+      </table>
+      <p id="empty-state" class="empty-state" hidden>No leads yet. Add your first lead above.</p>
+    </div>
+  </section>
+
+</main>
+
+<!-- Edit Lead Modal -->
+<div id="edit-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2>Edit Lead</h2>
+    <p class="modal-client-name" id="editClientName"></p>
+
+    <div class="field">
+      <label for="editStatus">Status</label>
+      <select id="editStatus">
+        <option value="New">New</option>
+        <option value="Contacted">Contacted</option>
+        <option value="Qualified">Qualified</option>
+        <option value="Won">Won</option>
+        <option value="Hold">Hold</option>
+        <option value="Cancelled">Cancelled</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="editComment">Comment <span class="hint">(max 50 characters, required when status changes)</span></label>
+      <textarea id="editComment" rows="2" maxlength="50"></textarea>
+      <span class="char-count"><span id="editCommentCount">0</span>/50</span>
+    </div>
+
+    <p id="editError" class="modal-error" hidden></p>
+
+    <div class="modal-actions">
+      <button type="button" id="editCancelBtn" class="btn-secondary">Cancel</button>
+      <button type="button" id="editSaveBtn" class="btn-primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
