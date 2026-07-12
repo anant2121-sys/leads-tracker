@@ -109,6 +109,62 @@ app.put("/leads/:id", authenticate, (req, res) => {
   res.json(rowToLead(row));
 });
 
+const SALT_ROUNDS = 10;
+
+app.post("/admin/users", authenticate, requireAdmin, async (req, res) => {
+  const { email, password, role } = req.body || {};
+
+  if (!email || !password || !role) {
+    return res.status(400).json({ error: "email, password, and role are required." });
+  }
+
+  if (role !== "admin" && role !== "basic") {
+    return res.status(400).json({ error: 'role must be "admin" or "basic".' });
+  }
+
+  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  if (existing) {
+    return res.status(409).json({ error: "A user with this email already exists." });
+  }
+
+  const hashed = await bcrypt.hash(password, SALT_ROUNDS);
+  const result = db
+    .prepare("INSERT INTO users (email, password, role) VALUES (?, ?, ?)")
+    .run(email, hashed, role);
+
+  res.status(201).json({ id: result.lastInsertRowid, email, role });
+});
+
+app.put("/admin/users/:id/reset-password", authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { password } = req.body || {};
+
+  if (!password) {
+    return res.status(400).json({ error: "password is required." });
+  }
+
+  const existing = db.prepare("SELECT id FROM users WHERE id = ?").get(id);
+  if (!existing) {
+    return res.status(404).json({ error: "User not found." });
+  }
+
+  const hashed = await bcrypt.hash(password, SALT_ROUNDS);
+  db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hashed, id);
+
+  res.json({ id: Number(id), message: "Password reset." });
+});
+
+app.delete("/admin/leads/clear", authenticate, requireAdmin, (req, res) => {
+  const { confirm } = req.body || {};
+
+  if (confirm !== true) {
+    return res.status(400).json({ error: "Set confirm: true in the request body to clear all leads." });
+  }
+
+  const result = db.prepare("DELETE FROM leads").run();
+  res.json({ message: "All leads cleared.", deletedCount: result.changes });
+});
+
 app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
 });
