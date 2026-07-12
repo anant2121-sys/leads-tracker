@@ -10,9 +10,29 @@
 
 <header class="app-header">
   <h1>Client / Leads Tracker</h1>
+  <button type="button" id="logoutBtn" class="btn-logout" hidden>Logout</button>
 </header>
 
-<main class="container">
+<!-- Login Screen -->
+<div id="login-screen" class="login-screen" hidden>
+  <div class="login-box">
+    <h2>Sign In</h2>
+    <form id="login-form">
+      <div class="field">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" required>
+      </div>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" required>
+      </div>
+      <button type="submit" class="btn-primary">Log In</button>
+      <p id="loginError" class="inline-error" hidden></p>
+    </form>
+  </div>
+</div>
+
+<main class="container" id="app-content" hidden>
 
   <!-- Add Lead Form -->
   <section class="card">
@@ -150,7 +170,85 @@
     </div>
   </section>
 
+  <!-- Admin Panel -->
+  <section class="card" id="admin-panel" hidden>
+    <h2>Admin Panel</h2>
+
+    <h3>Create User</h3>
+    <form id="create-user-form">
+      <div class="form-grid">
+        <div class="field">
+          <label for="newUserEmail">Email *</label>
+          <input type="email" id="newUserEmail" required>
+        </div>
+        <div class="field">
+          <label for="newUserPassword">Password *</label>
+          <input type="password" id="newUserPassword" required minlength="6">
+        </div>
+        <div class="field">
+          <label for="newUserRole">Role *</label>
+          <select id="newUserRole" required>
+            <option value="basic">basic</option>
+            <option value="admin">admin</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit" class="btn-primary">Create User</button>
+      <p id="createUserSuccess" class="inline-success" hidden></p>
+      <p id="createUserError" class="inline-error" hidden></p>
+    </form>
+
+    <h3>Users</h3>
+    <p id="usersLoadError" class="inline-error" hidden></p>
+    <div class="table-wrap">
+      <table id="users-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+        </tbody>
+      </table>
+    </div>
+  </section>
+
 </main>
+
+<!-- Edit User Modal -->
+<div id="edit-user-modal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <h2>Edit User</h2>
+
+    <div class="field">
+      <label for="editUserEmail">Email</label>
+      <input type="email" id="editUserEmail">
+    </div>
+
+    <div class="field">
+      <label for="editUserRole">Role</label>
+      <select id="editUserRole">
+        <option value="basic">basic</option>
+        <option value="admin">admin</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="editUserPassword">New Password <span class="hint">(leave blank to keep current)</span></label>
+      <input type="password" id="editUserPassword" minlength="6">
+    </div>
+
+    <p id="editUserError" class="modal-error" hidden></p>
+
+    <div class="modal-actions">
+      <button type="button" id="editUserCancelBtn" class="btn-secondary">Cancel</button>
+      <button type="button" id="editUserSaveBtn" class="btn-primary">Save</button>
+    </div>
+  </div>
+</div>
 
 <!-- Edit Lead Modal -->
 <div id="edit-modal" class="modal-overlay" hidden>

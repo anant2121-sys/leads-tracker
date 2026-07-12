@@ -19,7 +19,7 @@ app.post("/login", async (req, res) => {
     return res.status(400).json({ error: "Email and password are required." });
   }
 
-  const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  const user = db.prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)").get(email);
   if (!user) {
     return res.status(401).json({ error: "Invalid email or password." });
   }
@@ -122,7 +122,7 @@ app.post("/admin/users", authenticate, requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'role must be "admin" or "basic".' });
   }
 
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  const existing = db.prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?)").get(email);
   if (existing) {
     return res.status(409).json({ error: "A user with this email already exists." });
   }
@@ -133,6 +133,51 @@ app.post("/admin/users", authenticate, requireAdmin, async (req, res) => {
     .run(email, hashed, role);
 
   res.status(201).json({ id: result.lastInsertRowid, email, role });
+});
+
+app.get("/admin/users", authenticate, requireAdmin, (req, res) => {
+  const rows = db.prepare("SELECT id, email, role FROM users ORDER BY id").all();
+  res.json(rows);
+});
+
+app.put("/admin/users/:id", authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  if (!existing) {
+    return res.status(404).json({ error: "User not found." });
+  }
+
+  const { email, role, password } = req.body || {};
+
+  if (email !== undefined && !email) {
+    return res.status(400).json({ error: "email cannot be empty." });
+  }
+
+  if (role !== undefined && role !== "admin" && role !== "basic") {
+    return res.status(400).json({ error: 'role must be "admin" or "basic".' });
+  }
+
+  if (email !== undefined && email.toLowerCase() !== existing.email.toLowerCase()) {
+    const emailTaken = db
+      .prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id != ?")
+      .get(email, id);
+    if (emailTaken) {
+      return res.status(409).json({ error: "A user with this email already exists." });
+    }
+  }
+
+  const newEmail = email !== undefined ? email : existing.email;
+  const newRole = role !== undefined ? role : existing.role;
+  const newPassword = password ? await bcrypt.hash(password, SALT_ROUNDS) : existing.password;
+
+  db.prepare("UPDATE users SET email = ?, role = ?, password = ? WHERE id = ?").run(
+    newEmail,
+    newRole,
+    newPassword,
+    id
+  );
+
+  res.json({ id: Number(id), email: newEmail, role: newRole });
 });
 
 app.put("/admin/users/:id/reset-password", authenticate, requireAdmin, async (req, res) => {

@@ -10,14 +10,61 @@
 
 const API_BASE = "http://localhost:3000";
 const STATUSES = ["New", "Contacted", "Qualified", "Won", "Hold", "Cancelled"];
+const TOKEN_KEY = "leadsTrackerToken";
 
 let leads = [];
 let editingLeadId = null;
 
+// ---- Auth / token helpers -----------------------------------------------
+
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+function setToken(token) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(base64));
+  } catch {
+    return null;
+  }
+}
+
+function isTokenValid(token) {
+  if (!token) return false;
+  const payload = decodeJwtPayload(token);
+  return !!payload && !!payload.exp && payload.exp * 1000 > Date.now();
+}
+
+function authHeaders() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function handleSessionExpired() {
+  clearToken();
+  currentUserRole = null;
+  showLogin();
+  loginError.textContent = "Your session has expired. Please log in again.";
+  loginError.hidden = false;
+}
+
 // ---- API helpers -------------------------------------------------------
 
 async function apiGetLeads() {
-  const res = await fetch(`${API_BASE}/leads`);
+  const res = await fetch(`${API_BASE}/leads`, { headers: { ...authHeaders() } });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) throw new Error(`GET /leads failed (${res.status})`);
   return res.json();
 }
@@ -25,9 +72,13 @@ async function apiGetLeads() {
 async function apiCreateLead(payload) {
   const res = await fetch(`${API_BASE}/leads`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(payload),
   });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) throw new Error(`POST /leads failed (${res.status})`);
   return res.json();
 }
@@ -35,11 +86,55 @@ async function apiCreateLead(payload) {
 async function apiUpdateLead(id, payload) {
   const res = await fetch(`${API_BASE}/leads/${encodeURIComponent(id)}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(payload),
   });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) throw new Error(`PUT /leads/${id} failed (${res.status})`);
   return res.json();
+}
+
+async function apiGetUsers() {
+  const res = await fetch(`${API_BASE}/admin/users`, { headers: { ...authHeaders() } });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error("Unauthorized");
+  }
+  if (!res.ok) throw new Error(`GET /admin/users failed (${res.status})`);
+  return res.json();
+}
+
+async function apiCreateUser(payload) {
+  const res = await fetch(`${API_BASE}/admin/users`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error("Unauthorized");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Failed to create user (${res.status})`);
+  return data;
+}
+
+async function apiUpdateUser(id, payload) {
+  const res = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(payload),
+  });
+  if (res.status === 401) {
+    handleSessionExpired();
+    throw new Error("Unauthorized");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Failed to update user (${res.status})`);
+  return data;
 }
 
 function normalizeLeads(data) {
@@ -96,6 +191,104 @@ const editSaveBtn = document.getElementById("editSaveBtn");
 const loadError = document.getElementById("loadError");
 const formError = document.getElementById("formError");
 const formSubmitBtn = form.querySelector('button[type="submit"]');
+
+const loginScreen = document.getElementById("login-screen");
+const appContent = document.getElementById("app-content");
+const logoutBtn = document.getElementById("logoutBtn");
+const loginForm = document.getElementById("login-form");
+const loginError = document.getElementById("loginError");
+const loginSubmitBtn = loginForm.querySelector('button[type="submit"]');
+
+const adminPanel = document.getElementById("admin-panel");
+const createUserForm = document.getElementById("create-user-form");
+const newUserEmail = document.getElementById("newUserEmail");
+const newUserPassword = document.getElementById("newUserPassword");
+const newUserRole = document.getElementById("newUserRole");
+const createUserSuccess = document.getElementById("createUserSuccess");
+const createUserError = document.getElementById("createUserError");
+const createUserSubmitBtn = createUserForm.querySelector('button[type="submit"]');
+const usersTbody = document.getElementById("users-tbody");
+const usersLoadError = document.getElementById("usersLoadError");
+
+const editUserModal = document.getElementById("edit-user-modal");
+const editUserEmail = document.getElementById("editUserEmail");
+const editUserRole = document.getElementById("editUserRole");
+const editUserPassword = document.getElementById("editUserPassword");
+const editUserError = document.getElementById("editUserError");
+const editUserCancelBtn = document.getElementById("editUserCancelBtn");
+const editUserSaveBtn = document.getElementById("editUserSaveBtn");
+
+let currentUserRole = null;
+let editingUserId = null;
+
+// ---- Login / logout -------------------------------------------------------
+
+function showLogin() {
+  loginScreen.hidden = false;
+  appContent.hidden = true;
+  logoutBtn.hidden = true;
+  adminPanel.hidden = true;
+}
+
+function showApp() {
+  loginScreen.hidden = true;
+  appContent.hidden = false;
+  logoutBtn.hidden = false;
+}
+
+function activateSession(token) {
+  const payload = decodeJwtPayload(token);
+  currentUserRole = payload ? payload.role : null;
+  showApp();
+
+  const isAdmin = currentUserRole === "admin";
+  adminPanel.hidden = !isAdmin;
+  if (isAdmin) refreshUsers();
+}
+
+loginForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  loginError.hidden = true;
+
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+
+  loginSubmitBtn.disabled = true;
+  loginSubmitBtn.textContent = "Logging in...";
+
+  try {
+    const res = await fetch(`${API_BASE}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      loginError.textContent = data.error || "Login failed. Check your email and password.";
+      loginError.hidden = false;
+      return;
+    }
+
+    setToken(data.token);
+    loginForm.reset();
+    activateSession(data.token);
+    await refreshLeads();
+  } catch (err) {
+    console.error(err);
+    loginError.textContent = `Unable to reach the API at ${API_BASE}. Is the server running?`;
+    loginError.hidden = false;
+  } finally {
+    loginSubmitBtn.disabled = false;
+    loginSubmitBtn.textContent = "Log In";
+  }
+});
+
+logoutBtn.addEventListener("click", () => {
+  clearToken();
+  currentUserRole = null;
+  showLogin();
+});
 
 // ---- Form handling ------------------------------------------------------
 
@@ -263,6 +456,127 @@ editSaveBtn.addEventListener("click", async () => {
   }
 });
 
+// ---- Admin panel ------------------------------------------------------------
+
+async function refreshUsers() {
+  try {
+    const users = await apiGetUsers();
+    renderUsers(users);
+    usersLoadError.hidden = true;
+  } catch (err) {
+    console.error(err);
+    usersLoadError.textContent = "Unable to load users.";
+    usersLoadError.hidden = false;
+  }
+}
+
+function renderUsers(users) {
+  usersTbody.innerHTML = "";
+
+  users.forEach((user) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${user.id}</td>
+      <td>${escapeHtml(user.email)}</td>
+      <td>${escapeHtml(user.role)}</td>
+      <td></td>
+    `;
+
+    const actionsTd = tr.children[3];
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn-edit";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => openEditUserModal(user));
+    actionsTd.appendChild(editBtn);
+
+    usersTbody.appendChild(tr);
+  });
+}
+
+createUserForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  createUserError.hidden = true;
+  createUserSuccess.hidden = true;
+
+  const payload = {
+    email: newUserEmail.value.trim(),
+    password: newUserPassword.value,
+    role: newUserRole.value,
+  };
+
+  createUserSubmitBtn.disabled = true;
+  createUserSubmitBtn.textContent = "Creating...";
+
+  try {
+    await apiCreateUser(payload);
+    createUserSuccess.textContent = `User "${payload.email}" created.`;
+    createUserSuccess.hidden = false;
+    createUserForm.reset();
+    newUserRole.value = "basic";
+    await refreshUsers();
+  } catch (err) {
+    console.error(err);
+    createUserError.textContent = err.message;
+    createUserError.hidden = false;
+  } finally {
+    createUserSubmitBtn.disabled = false;
+    createUserSubmitBtn.textContent = "Create User";
+  }
+});
+
+function openEditUserModal(user) {
+  editingUserId = user.id;
+  editUserEmail.value = user.email;
+  editUserRole.value = user.role;
+  editUserPassword.value = "";
+  editUserError.hidden = true;
+  editUserModal.hidden = false;
+  editUserEmail.focus();
+}
+
+function closeEditUserModal() {
+  editingUserId = null;
+  editUserModal.hidden = true;
+}
+
+editUserCancelBtn.addEventListener("click", closeEditUserModal);
+
+editUserModal.addEventListener("click", (e) => {
+  if (e.target === editUserModal) closeEditUserModal();
+});
+
+editUserSaveBtn.addEventListener("click", async () => {
+  const email = editUserEmail.value.trim();
+  const role = editUserRole.value;
+  const password = editUserPassword.value;
+
+  if (!email) {
+    editUserError.textContent = "Email is required.";
+    editUserError.hidden = false;
+    return;
+  }
+
+  const payload = { email, role };
+  if (password) payload.password = password;
+
+  editUserSaveBtn.disabled = true;
+  editUserSaveBtn.textContent = "Saving...";
+  editUserError.hidden = true;
+
+  try {
+    await apiUpdateUser(editingUserId, payload);
+    await refreshUsers();
+    closeEditUserModal();
+  } catch (err) {
+    console.error(err);
+    editUserError.textContent = err.message;
+    editUserError.hidden = false;
+  } finally {
+    editUserSaveBtn.disabled = false;
+    editUserSaveBtn.textContent = "Save";
+  }
+});
+
 // ---- Rendering --------------------------------------------------------------
 
 function formatTimestamp(iso) {
@@ -353,4 +667,10 @@ function escapeHtml(str) {
 
 // ---- Init -------------------------------------------------------------------
 
-refreshLeads();
+if (isTokenValid(getToken())) {
+  activateSession(getToken());
+  refreshLeads();
+} else {
+  clearToken();
+  showLogin();
+}
