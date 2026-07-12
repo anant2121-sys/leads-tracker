@@ -3,10 +3,10 @@ const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const db = require("./db");
+const { authenticate, requireAdmin, JWT_SECRET } = require("./auth");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 const JWT_EXPIRES_IN = "2h";
 
 app.use(cors());
@@ -40,12 +40,12 @@ function rowToLead(row) {
   return { ...row, commentsHistory: JSON.parse(row.commentsHistory) };
 }
 
-app.get("/leads", (req, res) => {
+app.get("/leads", authenticate, (req, res) => {
   const rows = db.prepare("SELECT * FROM leads").all();
   res.json(rows.map(rowToLead));
 });
 
-app.post("/leads", (req, res) => {
+app.post("/leads", authenticate, (req, res) => {
   const {
     clientName,
     type,
@@ -90,7 +90,7 @@ app.post("/leads", (req, res) => {
   res.status(201).json(rowToLead(row));
 });
 
-app.put("/leads/:id", (req, res) => {
+app.put("/leads/:id", authenticate, (req, res) => {
   const { id } = req.params;
   const existing = db.prepare("SELECT * FROM leads WHERE id = ?").get(id);
   if (!existing) {
